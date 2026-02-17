@@ -1,0 +1,1 @@
+https://github.com/s4mn0v/v3-bitget-sdk-golang
