@@ -82,9 +82,7 @@ func layout(g *gocui.Gui) error {
 		v.Title = " Status "
 	} else {
 		v.Clear()
-		if _, err := fmt.Fprintf(v, "\n PAGE: %s\n (TAB to switch)", pageNames[currentPage]); err != nil {
-			return err
-		}
+		fmt.Fprintf(v, "\n  PAGE: %s\n  (TAB to switch)", pageNames[currentPage])
 	}
 
 	// Sidebar Bottom
