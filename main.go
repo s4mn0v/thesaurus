@@ -18,8 +18,8 @@ const (
 )
 
 var (
-	currentPage   = PageDashboard
-	pageNames     = []string{"DASHBOARD", "ANALYTICS", "SETTINGS"}
+	currentPage    = PageDashboard
+	pageNames      = []string{"DASHBOARD", "ANALYTICS", "SETTINGS"}
 	mainOX, mainOY = 0, 0
 	// Height of the content for each page to bound scrolling
 	pageHeights = map[Page]int{
@@ -54,15 +54,17 @@ func layout(g *gocui.Gui) error {
 	orange := gocui.Get256Color(172)
 
 	if v, err := g.SetView("main", 0, 0, mainWidth, maxY-1, 0); err != nil {
-		if !errors.Is(err, gocui.ErrUnknownView) { return err }
+		if !errors.Is(err, gocui.ErrUnknownView) {
+			return err
+		}
 		v.FrameColor = orange
 		v.Wrap = false // Ensure horizontal scroll works
 	} else {
 		v.Clear()
 		v.Title = " " + pageNames[currentPage] + " "
-		
+
 		drawContent(v)
-		
+
 		// Set origin AFTER drawing content so the buffer is populated
 		if err := v.SetOrigin(mainOX, mainOY); err != nil {
 			// Reset if coordinates become invalid (e.g. on terminal shrink)
@@ -73,17 +75,23 @@ func layout(g *gocui.Gui) error {
 
 	// Sidebar Top
 	if v, err := g.SetView("side_top", mainWidth+1, 0, maxX-1, 11, 0); err != nil {
-		if !errors.Is(err, gocui.ErrUnknownView) { return err }
+		if !errors.Is(err, gocui.ErrUnknownView) {
+			return err
+		}
 		v.FrameColor = orange
 		v.Title = " Status "
 	} else {
 		v.Clear()
-		fmt.Fprintf(v, "\n  PAGE: %s\n  (TAB to switch)", pageNames[currentPage])
+		if _, err := fmt.Fprintf(v, "\n PAGE: %s\n (TAB to switch)", pageNames[currentPage]); err != nil {
+			return err
+		}
 	}
 
 	// Sidebar Bottom
 	if v, err := g.SetView("side_bottom", mainWidth+1, 12, maxX-1, maxY-1, 0); err != nil {
-		if !errors.Is(err, gocui.ErrUnknownView) { return err }
+		if !errors.Is(err, gocui.ErrUnknownView) {
+			return err
+		}
 		v.FrameColor = orange
 		v.Title = " Technical "
 	} else {
