@@ -79,11 +79,27 @@ func layout(g *gocui.Gui) error {
 			return err
 		}
 		v.FrameColor = orange
-		v.Title = " Status "
+		v.Title = " Navigation "
 	} else {
+
 		v.Clear()
-		if _, err := fmt.Fprintf(v, "\n  PAGE: %s\n  (TAB to switch)", pageNames[currentPage]); err != nil {
-			return err // Handle the error appropriately
+		if _, err := fmt.Fprintln(v, "\n PAGES:"); err != nil {
+			return err
+		}
+		for i, name := range pageNames {
+			var err error
+			if Page(i) == currentPage {
+				_, err = fmt.Fprintf(v, "  \033[30;47m %-12s \033[0m\n", name)
+			} else {
+				_, err = fmt.Fprintf(v, "    %-12s \n", name)
+			}
+			if err != nil {
+				return err
+			}
+		}
+
+		if _, err := fmt.Fprintf(v, "\n (TAB to switch)"); err != nil {
+			return err
 		}
 	}
 
