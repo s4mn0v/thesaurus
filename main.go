@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strings"
+	"sync"
+	"time"
 
 	"github.com/awesome-gocui/gocui"
+	v2 "github.com/s4mn0v/bitget/pkg/client/v2"
 )
 
 type Page int
@@ -21,12 +23,16 @@ var (
 	currentPage    = PageDashboard
 	pageNames      = []string{"DASHBOARD", "ANALYTICS", "SETTINGS"}
 	mainOX, mainOY = 0, 0
-	// Height of the content for each page to bound scrolling
-	pageHeights = map[Page]int{
+	pageHeights    = map[Page]int{
 		PageDashboard: 100,
 		PageAnalytics: 150,
 		PageSettings:  20,
 	}
+
+	// State management
+	mu         sync.RWMutex
+	tickerInfo string
+	market     *v2.MixMarketClient
 )
 
 func main() {
@@ -36,14 +42,46 @@ func main() {
 	}
 	defer g.Close()
 
+	// Initialize SDK Client
+	market = new(v2.MixMarketClient).Init()
+
 	g.Highlight = true
 	g.Mouse = true
 	g.SetManagerFunc(layout)
 
 	setKeybindings(g)
 
+	// Start background fetcher
+	go fetchTickerLoop(g)
+
 	if err := g.MainLoop(); err != nil && !errors.Is(err, gocui.ErrQuit) {
 		log.Panicln(err)
+	}
+}
+
+// fetchTickerLoop polls the API concurrently.
+func fetchTickerLoop(g *gocui.Gui) {
+	params := map[string]string{
+		"symbol":      "BTCUSDT",
+		"productType": "USDT-FUTURES",
+	}
+
+	t := time.NewTicker(2 * time.Second)
+	defer t.Stop()
+
+	for range t.C {
+		resp, err := market.Ticker(params)
+
+		mu.Lock()
+		if err != nil {
+			tickerInfo = fmt.Sprintf("Error: %v", err)
+		} else {
+			tickerInfo = resp
+		}
+		mu.Unlock()
+
+		// Signal UI refresh
+		g.Update(func(g *gocui.Gui) error { return nil })
 	}
 }
 
@@ -58,22 +96,15 @@ func layout(g *gocui.Gui) error {
 			return err
 		}
 		v.FrameColor = orange
-		v.Wrap = false // Ensure horizontal scroll works
+		v.Wrap = true
 	} else {
 		v.Clear()
 		v.Title = " " + pageNames[currentPage] + " "
-
 		drawContent(v)
-
-		// Set origin AFTER drawing content so the buffer is populated
-		if err := v.SetOrigin(mainOX, mainOY); err != nil {
-			// Reset if coordinates become invalid (e.g. on terminal shrink)
-			mainOX, mainOY = 0, 0
-			_ = v.SetOrigin(0, 0)
-		}
+		_ = v.SetOrigin(mainOX, mainOY)
 	}
 
-	// Sidebar Top
+	// Navigation View
 	if v, err := g.SetView("side_top", mainWidth+1, 0, maxX-1, 11, 0); err != nil {
 		if !errors.Is(err, gocui.ErrUnknownView) {
 			return err
@@ -81,40 +112,30 @@ func layout(g *gocui.Gui) error {
 		v.FrameColor = orange
 		v.Title = " Navigation "
 	} else {
-
 		v.Clear()
-		if _, err := fmt.Fprintln(v, "\n PAGES:"); err != nil {
-			return err
-		}
+		fmt.Fprintln(v, "\n PAGES:")
 		for i, name := range pageNames {
-			var err error
 			if Page(i) == currentPage {
-				_, err = fmt.Fprintf(v, "  \033[30;47m %-12s \033[0m\n", name)
+				fmt.Fprintf(v, "  \033[30;47m %-12s \033[0m\n", name)
 			} else {
-				_, err = fmt.Fprintf(v, "    %-12s \n", name)
-			}
-			if err != nil {
-				return err
+				fmt.Fprintf(v, "    %-12s \n", name)
 			}
 		}
-
-		if _, err := fmt.Fprintf(v, "\n (TAB to switch)"); err != nil {
-			return err
-		}
+		fmt.Fprintf(v, "\n (TAB to switch)")
 	}
 
-	// Sidebar Bottom
+	// Technical View
 	if v, err := g.SetView("side_bottom", mainWidth+1, 12, maxX-1, maxY-1, 0); err != nil {
 		if !errors.Is(err, gocui.ErrUnknownView) {
 			return err
 		}
 		v.FrameColor = orange
-		v.Title = " Technical "
+		v.Title = " Market Status "
 	} else {
 		v.Clear()
-		if _, err := fmt.Fprintf(v, "\n  Scroll Y: %d\n  Scroll X: %d\n  Limit:    %d", mainOY, mainOX, pageHeights[currentPage]); err != nil {
-			return err
-		}
+		mu.RLock()
+		fmt.Fprintf(v, "\n  Symbol: BTCUSDT\n  Data size: %d bytes", len(tickerInfo))
+		mu.RUnlock()
 	}
 
 	_, _ = g.SetCurrentView("main")
@@ -122,63 +143,50 @@ func layout(g *gocui.Gui) error {
 }
 
 func drawContent(v *gocui.View) {
-	height, exists := pageHeights[currentPage]
-
-	if !exists {
-		log.Printf("No height defined for page: %v", currentPage)
-		return
-	}
-
-	for i := range height {
-		var err error
-		switch currentPage {
-		case PageDashboard:
-			_, err = fmt.Fprintf(v, "[%03d] DASHBOARD FEED: Monitoring System Nodes... %s\n", i, strings.Repeat(">", i/5))
-		case PageAnalytics:
-			_, err = fmt.Fprintf(v, "[%03d] ANALYTICS DATA: Market Volume Index #%X\n", i, i*255)
-		case PageSettings:
-			_, err = fmt.Fprintf(v, "[%03d] SETTING OPTION: Parameter Config Line\n", i)
+	switch currentPage {
+	case PageDashboard:
+		mu.RLock()
+		data := tickerInfo
+		mu.RUnlock()
+		if data == "" {
+			fmt.Fprintln(v, "Loading market data...")
+		} else {
+			fmt.Fprintln(v, data)
 		}
-		if err != nil {
-			log.Printf("Error writing to view: %v", err)
+	case PageAnalytics:
+		for i := range pageHeights[PageAnalytics] {
+			fmt.Fprintf(v, "[%03d] ANALYTICS DATA: Index #%X\n", i, i*255)
 		}
+	case PageSettings:
+		fmt.Fprintln(v, "Configuration parameters...")
 	}
 }
 
 func setKeybindings(g *gocui.Gui) {
 	_ = g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit)
 	_ = g.SetKeybinding("", gocui.KeyTab, gocui.ModNone, nextPage)
+	_ = g.SetKeybinding("main", gocui.KeyArrowDown, gocui.ModNone, scrollDown)
+	_ = g.SetKeybinding("main", gocui.KeyArrowUp, gocui.ModNone, scrollUp)
+}
 
-	_ = g.SetKeybinding("main", gocui.KeyArrowDown, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		_, vy := v.Size()
-		// Only scroll if there is content below the current view
-		if mainOY < pageHeights[currentPage]-(vy) {
-			mainOY++
-		}
-		return nil
-	})
-	_ = g.SetKeybinding("main", gocui.KeyArrowUp, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		if mainOY > 0 {
-			mainOY--
-		}
-		return nil
-	})
+func scrollDown(g *gocui.Gui, v *gocui.View) error {
+	_, vy := v.Size()
+	if mainOY < pageHeights[currentPage]-vy {
+		mainOY++
+	}
+	return nil
+}
 
-	_ = g.SetKeybinding("main", gocui.KeyArrowRight, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		mainOX++
-		return nil
-	})
-	_ = g.SetKeybinding("main", gocui.KeyArrowLeft, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		if mainOX > 0 {
-			mainOX--
-		}
-		return nil
-	})
+func scrollUp(g *gocui.Gui, v *gocui.View) error {
+	if mainOY > 0 {
+		mainOY--
+	}
+	return nil
 }
 
 func nextPage(g *gocui.Gui, v *gocui.View) error {
 	currentPage = Page((int(currentPage) + 1) % len(pageNames))
-	mainOX, mainOY = 0, 0 // Reset scroll when changing page
+	mainOX, mainOY = 0, 0
 	return nil
 }
 
