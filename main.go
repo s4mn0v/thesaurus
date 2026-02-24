@@ -171,7 +171,10 @@ func setKeybindings(g *gocui.Gui) {
 
 func scrollDown(g *gocui.Gui, v *gocui.View) error {
 	_, vy := v.Size()
-	if mainOY < pageHeights[currentPage]-vy {
+
+	lines := len(v.BufferLines())
+
+	if mainOY < lines-vy {
 		mainOY++
 	}
 	return nil
