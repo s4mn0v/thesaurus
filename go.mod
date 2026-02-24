@@ -4,7 +4,7 @@ go 1.24.0
 
 require (
 	github.com/awesome-gocui/gocui v1.1.0
-	github.com/s4mn0v/bitget v0.0.0-20260221014921-37da745e575b
+	github.com/s4mn0v/bitget v0.0.0-20260224025006-5bea337dbb15
 )
 
 require (
