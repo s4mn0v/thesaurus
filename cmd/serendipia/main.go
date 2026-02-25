@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/awesome-gocui/gocui"
+	"github.com/gookit/color"
 	"github.com/s4mn0v/serendipia/internal/trading"
 	"github.com/s4mn0v/serendipia/internal/ui"
 )
@@ -123,44 +124,52 @@ func layout(g *gocui.Gui) error {
 	}
 
 	if showHelp {
-		// Responsive Dimensions
-		w, h := 80, 30
+		w, h := 80, 20
 		x0, y0 := (maxX/2)-(w/2), (maxY/2)-(h/2)
 		x1, y1 := x0+w, y0+h
 
-		// 1. MAIN LIST VIEW
 		if v, err := g.SetView("help", x0, y0, x1, y1-4, 0); err != nil {
 			if !errors.Is(err, gocui.ErrUnknownView) {
 				return err
 			}
-			v.Title, v.Highlight, v.FrameColor = " Keybindings ", true, gocui.ColorCyan
-			v.SelBgColor, v.SelFgColor = gocui.ColorWhite, gocui.ColorBlack
+			v.Title, v.FrameColor = " Keybindings ", gocui.ColorCyan
+			g.SetCurrentView("help")
 		} else {
 			v.Clear()
+
+			// Define Styles
+			selectedStyle := color.Style{color.FgBlack, color.BgHiCyan, color.OpBold}
+			keyStyle := color.FgCyan
+			sectionStyle := color.FgLightBlue
+
 			currentSection := ""
 			for i, b := range ui.HelpMenu {
+				// Section Header handling
 				if b.Section != currentSection {
 					currentSection = b.Section
-					fmt.Fprintf(v, "\n  \033[34m--- %s ---\033[0m\n", currentSection)
+					fmt.Fprint(v, sectionStyle.Render(fmt.Sprintf("\n --- %s --- \n", currentSection)))
 				}
-				// Format: <Key> Description
-				line := fmt.Sprintf("  \033[36m%-7s\033[0m %s", b.Key, b.Desc)
+
+				// Content Formatting
+				// We pad the string to ensure the background color forms a full bar
+				line := fmt.Sprintf("  %-10s %-50s", b.Key, b.Desc)
+
 				if i == helpBinding {
-					fmt.Fprintf(v, "%s \n", line) // Highlighted line
+					// Apply background color for the selected item
+					fmt.Fprintln(v, selectedStyle.Render(line))
 				} else {
-					fmt.Fprintf(v, "%s \n", line)
+					// Normal rendering
+					fmt.Fprintf(v, "%s %s\n", keyStyle.Render(fmt.Sprintf("  %-10s", b.Key)), b.Desc)
 				}
 			}
-			// Bottom-right indicator (e.g., "2 of 6")
 			v.Subtitle = fmt.Sprintf(" %d of %d ", helpBinding+1, len(ui.HelpMenu))
 		}
 
-		// 2. DESCRIPTION BOX (Bottom of popup)
 		if v, err := g.SetView("help_desc", x0, y1-3, x1, y1, 0); err != nil {
 			if !errors.Is(err, gocui.ErrUnknownView) {
 				return err
 			}
-			v.FrameColor = gocui.ColorCyan
+			v.FrameColor, v.Title = gocui.ColorCyan, " Description "
 		} else {
 			v.Clear()
 			if helpBinding < len(ui.HelpMenu) {
