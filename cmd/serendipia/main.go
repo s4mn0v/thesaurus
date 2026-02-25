@@ -21,6 +21,7 @@ var (
 	engine        *trading.Engine
 	appLogger     *ui.UILogger
 	showHelp      bool
+	helpBinding   = 0
 )
 
 func main() {
@@ -122,30 +123,54 @@ func layout(g *gocui.Gui) error {
 	}
 
 	if showHelp {
-		width, height := 60, 10
-		x0 := (maxX / 2) - (width / 2)
-		y0 := (maxY / 2) - (height / 2)
-		x1 := x0 + width
-		y1 := y0 + height
+		// Responsive Dimensions
+		w, h := 80, 30
+		x0, y0 := (maxX/2)-(w/2), (maxY/2)-(h/2)
+		x1, y1 := x0+w, y0+h
 
-		if v, err := g.SetView("help", x0, y0, x1, y1, 0); err != nil {
+		// 1. MAIN LIST VIEW
+		if v, err := g.SetView("help", x0, y0, x1, y1-4, 0); err != nil {
 			if !errors.Is(err, gocui.ErrUnknownView) {
 				return err
 			}
-			v.Title = " Help / Keybindings "
-			v.FrameColor = gocui.ColorCyan
-			v.Wrap = true
-			fmt.Fprintln(v, "\n [TAB]  Switch Pages")
-			fmt.Fprintln(v, " [UP/DN] Scroll Content")
-			fmt.Fprintln(v, " [?]     Toggle this help")
-			fmt.Fprintln(v, " [^C]    Quit Application")
+			v.Title, v.Highlight, v.FrameColor = " Keybindings ", true, gocui.ColorCyan
+			v.SelBgColor, v.SelFgColor = gocui.ColorWhite, gocui.ColorBlack
+		} else {
+			v.Clear()
+			currentSection := ""
+			for i, b := range ui.HelpMenu {
+				if b.Section != currentSection {
+					currentSection = b.Section
+					fmt.Fprintf(v, "\n  \033[34m--- %s ---\033[0m\n", currentSection)
+				}
+				// Format: <Key> Description
+				line := fmt.Sprintf("  \033[36m%-7s\033[0m %s", b.Key, b.Desc)
+				if i == helpBinding {
+					fmt.Fprintf(v, "%s \n", line) // Highlighted line
+				} else {
+					fmt.Fprintf(v, "%s \n", line)
+				}
+			}
+			// Bottom-right indicator (e.g., "2 of 6")
+			v.Subtitle = fmt.Sprintf(" %d of %d ", helpBinding+1, len(ui.HelpMenu))
+		}
 
-			if _, err := g.SetCurrentView("help"); err != nil {
+		// 2. DESCRIPTION BOX (Bottom of popup)
+		if v, err := g.SetView("help_desc", x0, y1-3, x1, y1, 0); err != nil {
+			if !errors.Is(err, gocui.ErrUnknownView) {
 				return err
 			}
+			v.FrameColor = gocui.ColorCyan
+		} else {
+			v.Clear()
+			if helpBinding < len(ui.HelpMenu) {
+				fmt.Fprintf(v, " %s", ui.HelpMenu[helpBinding].Desc)
+			}
 		}
+		g.SetCurrentView("help")
 	} else {
 		g.DeleteView("help")
+		g.DeleteView("help_desc")
 	}
 
 	return nil
@@ -195,7 +220,20 @@ func setKeybindings(g *gocui.Gui) {
 
 	g.SetKeybinding("", '?', gocui.ModNone, toggleHelp)
 
-	// Also allow closing the help with 'Enter' or 'Esc' while focused on it
+	// Navigation inside Help
+	g.SetKeybinding("help", gocui.KeyArrowDown, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		if helpBinding < len(ui.HelpMenu)-1 {
+			helpBinding++
+		}
+		return nil
+	})
+	g.SetKeybinding("help", gocui.KeyArrowUp, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		if helpBinding > 0 {
+			helpBinding--
+		}
+		return nil
+	})
+	g.SetKeybinding("help", gocui.KeyEnter, gocui.ModNone, toggleHelp)
 	g.SetKeybinding("help", gocui.KeyEsc, gocui.ModNone, toggleHelp)
 }
 
