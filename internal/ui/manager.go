@@ -121,11 +121,13 @@ func (m *ViewManager) renderHelp(g *gocui.Gui, maxX, maxY int) error {
 		return nil
 	}
 
-	w, h := 80, 20
-	x0, y0 := (maxX/2)-(w/2), (maxY/2)-(h/2)
+	// Responsive calculation: Popup takes 80% of screen
+	w := maxX * 8 / 10
+	h := maxY * 8 / 10
+	x0, y0 := (maxX-w)/2, (maxY-h)/2
 	x1, y1 := x0+w, y0+h
 
-	if v, err := g.SetView("help", x0, y0, x1, y1-4, 0); err != nil {
+	if v, err := g.SetView("help", x0, y0, x1, y1-3, 0); err != nil {
 		if !errors.Is(err, gocui.ErrUnknownView) {
 			return err
 		}
@@ -153,7 +155,7 @@ func (m *ViewManager) renderHelp(g *gocui.Gui, maxX, maxY int) error {
 		v.Subtitle = fmt.Sprintf(" %d of %d ", m.helpBinding+1, len(HelpMenu))
 	}
 
-	if v, err := g.SetView("help_desc", x0, y1-3, x1, y1, 0); err != nil {
+	if v, err := g.SetView("help_desc", x0, y1-2, x1, y1, 0); err != nil {
 		if !errors.Is(err, gocui.ErrUnknownView) {
 			return err
 		}
@@ -178,6 +180,7 @@ func (m *ViewManager) SetKeybindings(g *gocui.Gui) {
 	g.SetKeybinding("help", gocui.KeyArrowUp, gocui.ModNone, m.helpUp)
 	g.SetKeybinding("help", gocui.KeyEnter, gocui.ModNone, m.ToggleHelp)
 	g.SetKeybinding("help", gocui.KeyEsc, gocui.ModNone, m.ToggleHelp)
+	g.SetKeybinding("help", 'q', gocui.ModNone, m.ToggleHelp)
 }
 
 func (m *ViewManager) ToggleHelp(g *gocui.Gui, v *gocui.View) error {
@@ -186,7 +189,7 @@ func (m *ViewManager) ToggleHelp(g *gocui.Gui, v *gocui.View) error {
 		_, err := g.SetCurrentView("main")
 		return err
 	}
-	m.logger.Log("Opened Help menu")
+	// m.logger.Log("Opened Help menu")
 	return nil
 }
 
