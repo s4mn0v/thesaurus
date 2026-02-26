@@ -99,25 +99,27 @@ func (m *ViewManager) Layout(g *gocui.Gui) error {
 		return err
 	}
 	return m.renderExitConfirm(g, maxX, maxY)
-	return m.renderHelp(g, maxX, maxY)
 }
 
 func (m *ViewManager) drawPage(v *gocui.View) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	if m.currentPage == 0 {
-		if m.currentTicker == nil {
-			fmt.Fprintln(v, "Connecting to simulated exchange...")
-			return
-		}
-		fmt.Fprintf(v, "\n \033[1mMARKET TICKER (SIMULATED)\033[0m\n")
-		fmt.Fprintf(v, " ─────────────\n")
-		fmt.Fprintf(v, " ASSET: %s\n", m.currentTicker.Symbol)
-		fmt.Fprintf(v, " PRICE: \033[32m$%s\033[0m\n", m.currentTicker.Price)
-	} else {
+	if m.currentPage != 0 {
 		fmt.Fprintf(v, "Page: %s content", m.pageNames[m.currentPage])
+		return
 	}
+
+	if m.currentTicker == nil {
+		fmt.Fprintln(v, "\033[33mConnecting to simulated exchange...\033[0m")
+		return
+	}
+
+	// Active State (Dashboard)
+	fmt.Fprint(v, "\n \033[1mMARKET TICKER (SIMULATED)\033[0m\n")
+	fmt.Fprint(v, " ─────────────\n")
+	fmt.Fprintf(v, " ASSET: %s\n", m.currentTicker.Symbol)
+	fmt.Fprintf(v, " PRICE: \033[32m$%s\033[0m\n", m.currentTicker.Price)
 }
 
 func (m *ViewManager) getActiveBindings() []Binding {
@@ -184,26 +186,24 @@ func (m *ViewManager) renderHelp(g *gocui.Gui, maxX, maxY int) error {
 }
 
 func (m *ViewManager) SetKeybindings(g *gocui.Gui) {
-	g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error { return gocui.ErrQuit })
+	// Global bindings
 	g.SetKeybinding("", gocui.KeyTab, gocui.ModNone, m.nextPage)
+	g.SetKeybinding("", '?', gocui.ModNone, m.ToggleHelp)
+	g.SetKeybinding("", gocui.KeyCtrlL, gocui.ModNone, m.clearLogs)
+	g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, m.toggleExitConfirm) // Only this one
+
+	// View-specific bindings
 	g.SetKeybinding("main", gocui.KeyArrowDown, gocui.ModNone, m.scrollDown)
 	g.SetKeybinding("main", gocui.KeyArrowUp, gocui.ModNone, m.scrollUp)
-	g.SetKeybinding("", '?', gocui.ModNone, m.ToggleHelp)
 
+	// Help View
 	g.SetKeybinding("help", gocui.KeyArrowDown, gocui.ModNone, m.helpDown)
 	g.SetKeybinding("help", gocui.KeyArrowUp, gocui.ModNone, m.helpUp)
 	g.SetKeybinding("help", gocui.KeyEnter, gocui.ModNone, m.ToggleHelp)
 	g.SetKeybinding("help", gocui.KeyEsc, gocui.ModNone, m.ToggleHelp)
 	g.SetKeybinding("help", 'q', gocui.ModNone, m.ToggleHelp)
 
-	// Logs
-
-	g.SetKeybinding("", gocui.KeyCtrlL, gocui.ModNone, m.clearLogs)
-
-	// Confirm Exit
-
-	g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, m.toggleExitConfirm)
-
+	// Confirm Exit View
 	g.SetKeybinding("exit_confirm", 'y', gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error { return gocui.ErrQuit })
 	g.SetKeybinding("exit_confirm", 'n', gocui.ModNone, m.toggleExitConfirm)
 	g.SetKeybinding("exit_confirm", gocui.KeyEsc, gocui.ModNone, m.toggleExitConfirm)
