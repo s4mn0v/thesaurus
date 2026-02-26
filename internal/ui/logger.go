@@ -7,7 +7,6 @@ import (
 	"github.com/awesome-gocui/gocui"
 )
 
-// UILogger implements io.Writer to pipe logs to the UI
 type UILogger struct {
 	gui *gocui.Gui
 }
@@ -23,7 +22,8 @@ func (l *UILogger) Log(format string, args ...interface{}) {
 			return nil
 		}
 		timestamp := time.Now().Format("15:04:05")
-		fmt.Fprintf(v, "\033[32m[%s]\033[0m %s\n", timestamp, fmt.Sprintf(format, args...))
+		msg := fmt.Sprintf(format, args...)
+		fmt.Fprintf(v, "\033[32m[%s]\033[0m %s\n", timestamp, msg)
 		return nil
 	})
 }

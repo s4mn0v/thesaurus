@@ -3,7 +3,7 @@ package ui
 type Binding struct {
 	Key     string
 	Desc    string
-	Section string // "Local", "Global", etc.
+	Section string
 }
 
 var HelpMenu = []Binding{

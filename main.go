@@ -1,0 +1,49 @@
+package main
+
+import (
+	"errors"
+	"log"
+	"time"
+
+	"github.com/awesome-gocui/gocui"
+	"github.com/s4mn0v/thesaurus/internal/trading"
+	"github.com/s4mn0v/thesaurus/internal/ui"
+)
+
+func main() {
+	g, err := gocui.NewGui(gocui.Output256, true)
+	if err != nil {
+		log.Panicln(err)
+	}
+	defer g.Close()
+
+	engine := trading.NewEngine()
+	manager := ui.NewViewManager()
+	logger := ui.NewUILogger(g)
+	manager.SetLogger(logger)
+
+	g.SetManagerFunc(manager.Layout)
+	manager.SetKeybindings(g)
+
+	// Background fetching loop
+	go func() {
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			data, err := engine.FetchTicker("BTCUSDT")
+			if err != nil {
+				logger.Log("\033[31mError:\033[0m %v", err)
+				continue
+			}
+			manager.UpdateTicker(data)
+			logger.Log("Market simulated: %s at %s", data.Symbol, data.Price)
+
+			// Refresh UI
+			g.Update(func(g *gocui.Gui) error { return nil })
+		}
+	}()
+
+	if err := g.MainLoop(); err != nil && !errors.Is(err, gocui.ErrQuit) {
+		log.Panicln(err)
+	}
+}

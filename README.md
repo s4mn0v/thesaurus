@@ -28,4 +28,3 @@ serendipia/
 ├── go.mod                      # Project dependencies
 └── go.sum                      # Checksums (includes github.com/s4mn0v/bitget)
 ```
-

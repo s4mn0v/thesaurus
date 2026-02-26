@@ -1,49 +1,38 @@
 package trading
 
 import (
-	"encoding/json"
 	"fmt"
-
-	v2 "github.com/s4mn0v/bitget/pkg/client/v2"
+	"math/rand"
+	"time"
 )
 
 type TickerData struct {
-	Symbol string `json:"symbol"`
-	Price  string `json:"lastPr"`
-}
-
-type tickerResponse struct {
-	Data []TickerData `json:"data"`
+	Symbol string
+	Price  string
 }
 
 type Engine struct {
-	market *v2.MixMarketClient
+	rng *rand.Rand
 }
 
 func NewEngine() *Engine {
-	return &Engine{market: new(v2.MixMarketClient).Init()}
+	return &Engine{
+		rng: rand.New(rand.NewSource(time.Now().UnixNano())),
+	}
 }
 
-// Method name must be FetchTicker
+// FetchTicker simulates an API call without external SDKs
 func (e *Engine) FetchTicker(symbol string) (*TickerData, error) {
-	params := map[string]string{
-		"symbol":      symbol,
-		"productType": "USDT-FUTURES",
-	}
+	// Simulate network latency
+	time.Sleep(100 * time.Millisecond)
 
-	resp, err := e.market.Ticker(params)
-	if err != nil {
-		return nil, err
-	}
+	// Simulate price fluctuation
+	basePrice := 65000.0
+	variation := (e.rng.Float64() * 1000) - 500
+	price := basePrice + variation
 
-	var tr tickerResponse
-	if err := json.Unmarshal([]byte(resp), &tr); err != nil {
-		return nil, fmt.Errorf("decode error: %w", err)
-	}
-
-	if len(tr.Data) > 0 {
-		return &tr.Data[0], nil
-	}
-
-	return nil, fmt.Errorf("no data for %s", symbol)
+	return &TickerData{
+		Symbol: symbol,
+		Price:  fmt.Sprintf("%.2f", price),
+	}, nil
 }
