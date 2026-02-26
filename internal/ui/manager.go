@@ -3,10 +3,10 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/awesome-gocui/gocui"
-	"github.com/gookit/color"
 	"github.com/s4mn0v/thesaurus/internal/trading"
 )
 
@@ -116,54 +116,62 @@ func (m *ViewManager) drawPage(v *gocui.View) {
 
 func (m *ViewManager) renderHelp(g *gocui.Gui, maxX, maxY int) error {
 	if !m.showHelp {
-		g.DeleteView("help")
-		g.DeleteView("help_desc")
 		return nil
 	}
 
 	// Responsive calculation: Popup takes 80% of screen
-	w := maxX * 8 / 10
-	h := maxY * 8 / 10
+	w, h := maxX*8/10, maxY*8/10
 	x0, y0 := (maxX-w)/2, (maxY-h)/2
 	x1, y1 := x0+w, y0+h
 
-	if v, err := g.SetView("help", x0, y0, x1, y1-3, 0); err != nil {
+	v, err := g.SetView("help", x0, y0, x1, y1-3, 0)
+	if err != nil {
 		if !errors.Is(err, gocui.ErrUnknownView) {
+			m.logger.Log("Keybindings Error")
 			return err
 		}
 		v.Title, v.FrameColor = " Keybindings ", gocui.ColorCyan
 		g.SetCurrentView("help")
-	} else {
-		v.Clear()
-		selectedStyle := color.Style{color.FgBlack, color.BgHiCyan, color.OpBold}
-		keyStyle := color.FgCyan
-		sectionStyle := color.FgLightBlue
-
-		currentSection := ""
-		for i, b := range HelpMenu {
-			if b.Section != currentSection {
-				currentSection = b.Section
-				fmt.Fprint(v, sectionStyle.Render(fmt.Sprintf("\n --- %s --- \n", currentSection)))
-			}
-			line := fmt.Sprintf("  %-10s %-50s", b.Key, b.Desc)
-			if i == m.helpBinding {
-				fmt.Fprintln(v, selectedStyle.Render(line))
-			} else {
-				fmt.Fprintf(v, "%s %s\n", keyStyle.Render(fmt.Sprintf("  %-10s", b.Key)), b.Desc)
-			}
-		}
-		v.Subtitle = fmt.Sprintf(" %d of %d ", m.helpBinding+1, len(HelpMenu))
 	}
 
-	if v, err := g.SetView("help_desc", x0, y1-2, x1, y1, 0); err != nil {
+	// Use strings.Builder to prevent multiple view-buffer refreshes
+	var buf strings.Builder
+	currentSection := ""
+
+	for i, b := range HelpMenu {
+		if b.Section != currentSection {
+			currentSection = b.Section
+			buf.WriteString("\n \033[94m--- " + currentSection + " ---\033[0m \n")
+		}
+
+		line := fmt.Sprintf("  %-10s %-50s", b.Key, b.Desc)
+		if i == m.helpBinding {
+			buf.WriteString("\033[30;106;1m" + line + "\033[0m\n")
+		} else {
+			buf.WriteString("  \033[36m")
+			buf.WriteString(fmt.Sprintf("%-10s", b.Key))
+			buf.WriteString("\033[0m ")
+			buf.WriteString(b.Desc)
+			buf.WriteByte('\n')
+		}
+	}
+
+	// Single atomic update to the view
+	v.Clear()
+	v.Write([]byte(buf.String()))
+	v.Subtitle = fmt.Sprintf(" %d of %d ", m.helpBinding+1, len(HelpMenu))
+
+	// Description View
+	vd, err := g.SetView("help_desc", x0, y1-2, x1, y1, 0)
+	if err != nil {
 		if !errors.Is(err, gocui.ErrUnknownView) {
 			return err
 		}
-		v.FrameColor, v.Title = gocui.ColorCyan, " Description "
+		vd.FrameColor, vd.Title = gocui.ColorCyan, " Description "
 	} else {
-		v.Clear()
+		vd.Clear()
 		if m.helpBinding < len(HelpMenu) {
-			fmt.Fprintf(v, " %s", HelpMenu[m.helpBinding].Desc)
+			vd.Write([]byte(" " + HelpMenu[m.helpBinding].Desc))
 		}
 	}
 	return nil
@@ -186,6 +194,8 @@ func (m *ViewManager) SetKeybindings(g *gocui.Gui) {
 func (m *ViewManager) ToggleHelp(g *gocui.Gui, v *gocui.View) error {
 	m.showHelp = !m.showHelp
 	if !m.showHelp {
+		g.DeleteView("help")
+		g.DeleteView("help_desc")
 		_, err := g.SetCurrentView("main")
 		return err
 	}
