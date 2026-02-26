@@ -114,12 +114,22 @@ func (m *ViewManager) drawPage(v *gocui.View) {
 	}
 }
 
+func (m *ViewManager) getActiveBindings() []Binding {
+	return GetCurrentHelp(m.pageNames[m.currentPage])
+}
+
 func (m *ViewManager) renderHelp(g *gocui.Gui, maxX, maxY int) error {
 	if !m.showHelp {
 		return nil
 	}
 
-	// Responsive calculation: Popup takes 80% of screen
+	activeBindings := m.getActiveBindings()
+
+	// Ensure index isn't out of bounds if page changed while help was open
+	if m.helpBinding >= len(activeBindings) {
+		m.helpBinding = 0
+	}
+
 	w, h := maxX*8/10, maxY*8/10
 	x0, y0 := (maxX-w)/2, (maxY-h)/2
 	x1, y1 := x0+w, y0+h
@@ -127,53 +137,43 @@ func (m *ViewManager) renderHelp(g *gocui.Gui, maxX, maxY int) error {
 	v, err := g.SetView("help", x0, y0, x1, y1-3, 0)
 	if err != nil {
 		if !errors.Is(err, gocui.ErrUnknownView) {
-			m.logger.Log("Keybindings Error")
 			return err
 		}
 		v.Title, v.FrameColor = " Keybindings ", gocui.ColorCyan
 		g.SetCurrentView("help")
 	}
 
-	// Use strings.Builder to prevent multiple view-buffer refreshes
 	var buf strings.Builder
 	currentSection := ""
-
-	for i, b := range HelpMenu {
+	for i, b := range activeBindings {
 		if b.Section != currentSection {
 			currentSection = b.Section
 			buf.WriteString("\n \033[94m--- " + currentSection + " ---\033[0m \n")
 		}
-
 		line := fmt.Sprintf("  %-10s %-50s", b.Key, b.Desc)
 		if i == m.helpBinding {
 			buf.WriteString("\033[30;106;1m" + line + "\033[0m\n")
 		} else {
-			buf.WriteString("  \033[36m")
-			buf.WriteString(fmt.Sprintf("%-10s", b.Key))
-			buf.WriteString("\033[0m ")
-			buf.WriteString(b.Desc)
-			buf.WriteByte('\n')
+			buf.WriteString(fmt.Sprintf("  \033[36m%-10s\033[0m %s\n", b.Key, b.Desc))
 		}
 	}
 
-	// Single atomic update to the view
 	v.Clear()
 	v.Write([]byte(buf.String()))
-	v.Subtitle = fmt.Sprintf(" %d of %d ", m.helpBinding+1, len(HelpMenu))
+	v.Subtitle = fmt.Sprintf(" %d of %d ", m.helpBinding+1, len(activeBindings))
 
-	// Description View
-	vd, err := g.SetView("help_desc", x0, y1-2, x1, y1, 0)
-	if err != nil {
+	if vd, err := g.SetView("help_desc", x0, y1-2, x1, y1, 0); err != nil {
 		if !errors.Is(err, gocui.ErrUnknownView) {
 			return err
 		}
 		vd.FrameColor, vd.Title = gocui.ColorCyan, " Description "
 	} else {
 		vd.Clear()
-		if m.helpBinding < len(HelpMenu) {
-			vd.Write([]byte(" " + HelpMenu[m.helpBinding].Desc))
+		if m.helpBinding < len(activeBindings) {
+			vd.Write([]byte(" " + activeBindings[m.helpBinding].Desc))
 		}
 	}
+
 	return nil
 }
 
@@ -206,6 +206,7 @@ func (m *ViewManager) ToggleHelp(g *gocui.Gui, v *gocui.View) error {
 func (m *ViewManager) nextPage(g *gocui.Gui, v *gocui.View) error {
 	m.currentPage = (m.currentPage + 1) % len(m.pageNames)
 	m.mainOY = 0
+	m.helpBinding = 0 // Reset help cursor when switching pages
 	return nil
 }
 
@@ -225,7 +226,7 @@ func (m *ViewManager) scrollUp(g *gocui.Gui, v *gocui.View) error {
 }
 
 func (m *ViewManager) helpDown(g *gocui.Gui, v *gocui.View) error {
-	if m.helpBinding < len(HelpMenu)-1 {
+	if m.helpBinding < len(m.getActiveBindings())-1 {
 		m.helpBinding++
 	}
 	return nil
