@@ -24,7 +24,7 @@ func NewEngine() *Engine {
 // FetchTicker simulates an API call without external SDKs
 func (e *Engine) FetchTicker(symbol string) (*TickerData, error) {
 	// Simulate network latency
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 
 	// Simulate price fluctuation
 	basePrice := 65000.0

@@ -11,14 +11,15 @@ import (
 )
 
 type ViewManager struct {
-	mu            sync.RWMutex
-	currentPage   int
-	pageNames     []string
-	mainOY        int
-	currentTicker *trading.TickerData
-	showHelp      bool
-	helpBinding   int
-	logger        *UILogger
+	mu              sync.RWMutex
+	currentPage     int
+	pageNames       []string
+	mainOY          int
+	currentTicker   *trading.TickerData
+	showHelp        bool
+	helpBinding     int
+	logger          *UILogger
+	showExitConfirm bool
 }
 
 func NewViewManager() *ViewManager {
@@ -93,6 +94,11 @@ func (m *ViewManager) Layout(g *gocui.Gui) error {
 		fmt.Fprintf(v, "\033[33mKeybindings:\033[0m \033[36m?\033[0m")
 	}
 
+	// 5. Confirm Exit
+	if err := m.renderHelp(g, maxX, maxY); err != nil {
+		return err
+	}
+	return m.renderExitConfirm(g, maxX, maxY)
 	return m.renderHelp(g, maxX, maxY)
 }
 
@@ -189,6 +195,18 @@ func (m *ViewManager) SetKeybindings(g *gocui.Gui) {
 	g.SetKeybinding("help", gocui.KeyEnter, gocui.ModNone, m.ToggleHelp)
 	g.SetKeybinding("help", gocui.KeyEsc, gocui.ModNone, m.ToggleHelp)
 	g.SetKeybinding("help", 'q', gocui.ModNone, m.ToggleHelp)
+
+	// Logs
+
+	g.SetKeybinding("", gocui.KeyCtrlL, gocui.ModNone, m.clearLogs)
+
+	// Confirm Exit
+
+	g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, m.toggleExitConfirm)
+
+	g.SetKeybinding("exit_confirm", 'y', gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error { return gocui.ErrQuit })
+	g.SetKeybinding("exit_confirm", 'n', gocui.ModNone, m.toggleExitConfirm)
+	g.SetKeybinding("exit_confirm", gocui.KeyEsc, gocui.ModNone, m.toggleExitConfirm)
 }
 
 func (m *ViewManager) ToggleHelp(g *gocui.Gui, v *gocui.View) error {
@@ -235,6 +253,48 @@ func (m *ViewManager) helpDown(g *gocui.Gui, v *gocui.View) error {
 func (m *ViewManager) helpUp(g *gocui.Gui, v *gocui.View) error {
 	if m.helpBinding > 0 {
 		m.helpBinding--
+	}
+	return nil
+}
+
+func (m *ViewManager) clearLogs(g *gocui.Gui, v *gocui.View) error {
+	vLogs, err := g.View("side_bottom")
+	if err != nil {
+		return nil
+	}
+
+	vLogs.Clear()
+	return vLogs.SetOrigin(0, 0)
+}
+
+func (m *ViewManager) renderExitConfirm(g *gocui.Gui, maxX, maxY int) error {
+	if !m.showExitConfirm {
+		g.DeleteView("exit_confirm")
+		return nil
+	}
+
+	w, h := 30, 3
+	x0, y0 := (maxX-w)/2, (maxY-h)/2
+	x1, y1 := x0+w, y0+h
+
+	if v, err := g.SetView("exit_confirm", x0, y0, x1, y1, 0); err != nil {
+		if !errors.Is(err, gocui.ErrUnknownView) {
+			return err
+		}
+		v.Title = " Quit? "
+		v.FrameColor = gocui.ColorRed
+		fmt.Fprint(v, " Are you sure? (y/n)")
+		g.SetCurrentView("exit_confirm")
+	}
+	return nil
+}
+
+func (m *ViewManager) toggleExitConfirm(g *gocui.Gui, v *gocui.View) error {
+	m.showExitConfirm = !m.showExitConfirm
+	if !m.showExitConfirm {
+		g.DeleteView("exit_confirm")
+		_, err := g.SetCurrentView("main")
+		return err
 	}
 	return nil
 }

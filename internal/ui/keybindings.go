@@ -7,6 +7,7 @@ type Binding struct {
 }
 
 var GlobalBindings = []Binding{
+	{"c-l", "Clear Logs", "Global"},
 	{"?", "Toggle help", "Global"},
 	{"q", "Quit", "Global"},
 }
