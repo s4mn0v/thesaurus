@@ -1,4 +1,4 @@
-module github.com/s4mn0v/serendipia
+module github.com/s4mn0v/thesaurus
 
 go 1.24.0
 
