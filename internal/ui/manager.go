@@ -40,7 +40,7 @@ func (m *ViewManager) UpdateTicker(data *trading.TickerData) {
 
 func (m *ViewManager) Layout(g *gocui.Gui) error {
 	maxX, maxY := g.Size()
-	orange := gocui.Get256Color(172)
+	orange := gocui.Get256Color(208)
 
 	// Layout Constants
 	navH := 2      // Navigation height
