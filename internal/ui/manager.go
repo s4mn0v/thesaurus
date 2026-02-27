@@ -40,13 +40,42 @@ func (m *ViewManager) UpdateTicker(data *trading.TickerData) {
 
 func (m *ViewManager) Layout(g *gocui.Gui) error {
 	maxX, maxY := g.Size()
-	sideW := 40
-	mainW := maxX - sideW - 1
 	orange := gocui.Get256Color(172)
-	footerY := maxY - 2
 
-	// 1. MAIN CONTENT
-	if v, err := g.SetView("main", 0, 0, mainW, footerY, 0); err != nil {
+	// Layout Constants
+	navH := 2      // Navigation height
+	spacer := 0    // Space between nav and content
+	sideW := 45    // Right panel width
+	footerH := 2   // Footer height
+	overviewH := 6 // Overview panel height
+
+	// 1. TOP NAVIGATION (Horizontal)
+	// Y1 set to navH ensures it only takes the top rows
+	if v, err := g.SetView("navigation", 0, 0, maxX-1, navH, 0); err != nil {
+		if !errors.Is(err, gocui.ErrUnknownView) {
+			return err
+		}
+		v.Title, v.FrameColor = " Navigation ", orange
+	} else {
+		v.Clear()
+		var navItems []string
+		for i, name := range m.pageNames {
+			if i == m.currentPage {
+				navItems = append(navItems, fmt.Sprintf("\033[30;47m %s \033[0m", name))
+			} else {
+				navItems = append(navItems, fmt.Sprintf(" %s ", name))
+			}
+		}
+		fmt.Fprint(v, strings.Join(navItems, "  "))
+	}
+
+	// Calculate vertical starting point for all content panels
+	contentY0 := navH + spacer + 1
+	contentY1 := maxY - footerH
+	mainX1 := maxX - sideW - 1
+
+	// 2. MAIN CONTENT (Left Side)
+	if v, err := g.SetView("main", 0, contentY0, mainX1, contentY1, 0); err != nil {
 		if !errors.Is(err, gocui.ErrUnknownView) {
 			return err
 		}
@@ -58,43 +87,39 @@ func (m *ViewManager) Layout(g *gocui.Gui) error {
 		v.Title = " " + m.pageNames[m.currentPage] + " "
 	}
 
-	// 2. NAVIGATION
-	if v, err := g.SetView("side_top", mainW+1, 0, maxX-1, 10, 0); err != nil {
+	rightX0 := mainX1 + 1
+	overviewY1 := contentY0 + overviewH
+
+	// 3. OVERVIEW / DESCRIPTION (Right Top)
+	if v, err := g.SetView("description", rightX0, contentY0, maxX-1, overviewY1, 0); err != nil {
 		if !errors.Is(err, gocui.ErrUnknownView) {
 			return err
 		}
-		v.Title, v.FrameColor = " Navigation ", orange
+		v.Title, v.FrameColor, v.Wrap = " Overview ", orange, true
 	} else {
 		v.Clear()
-		for i, name := range m.pageNames {
-			if i == m.currentPage {
-				fmt.Fprintf(v, " > \033[30;47m %s \033[0m\n", name)
-			} else {
-				fmt.Fprintf(v, "   %s \n", name)
-			}
-		}
+		m.renderDescription(v)
 	}
 
-	// 3. LOGS & STATUS
-	if v, err := g.SetView("side_bottom", mainW+1, 11, maxX-1, footerY, 0); err != nil {
+	// 4. LOGS & ACTIVITY (Right Bottom)
+	if v, err := g.SetView("side_bottom", rightX0, overviewY1+1, maxX-1, contentY1, 0); err != nil {
 		if !errors.Is(err, gocui.ErrUnknownView) {
 			return err
 		}
-		v.Title, v.FrameColor, v.Autoscroll = " Logs & Status ", orange, true
+		v.Title, v.FrameColor, v.Autoscroll, v.Wrap = " Logs & Activity ", orange, true, true
 	}
 
-	// 4. FOOTER
-	if v, err := g.SetView("footer", -1, footerY, maxX, maxY, 0); err != nil {
+	// 5. FOOTER
+	if v, err := g.SetView("footer", -1, maxY-footerH, maxX, maxY, 0); err != nil {
 		if !errors.Is(err, gocui.ErrUnknownView) {
 			return err
 		}
 		v.Frame = false
 	} else {
 		v.Clear()
-		fmt.Fprintf(v, "\033[33mKeybindings:\033[0m \033[36m?\033[0m")
+		fmt.Fprintf(v, "\033[33mKeybindings:\033[0m \033[36m?\033[0m | \033[33mPage:\033[0m \033[36mTAB\033[0m")
 	}
 
-	// 5. Confirm Exit
 	if err := m.renderHelp(g, maxX, maxY); err != nil {
 		return err
 	}
@@ -185,12 +210,31 @@ func (m *ViewManager) renderHelp(g *gocui.Gui, maxX, maxY int) error {
 	return nil
 }
 
+func (m *ViewManager) renderDescription(v *gocui.View) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	descriptions := map[string]string{
+		"DASHBOARD": "Real-time market data monitoring and asset tracking.",
+		"ANALYTICS": "Historical performance data and trend calculations.",
+		"SETTINGS":  "Application configuration and API key management.",
+	}
+
+	page := m.pageNames[m.currentPage]
+	fmt.Fprintf(v, "\033[36mMode:\033[0m %s\n", page)
+	fmt.Fprintf(v, "\033[37m%s\033[0m\n\n", descriptions[page])
+
+	if m.currentTicker != nil {
+		fmt.Fprintf(v, "\033[32mActive Ticker:\033[0m %s", m.currentTicker.Symbol)
+	}
+}
+
 func (m *ViewManager) SetKeybindings(g *gocui.Gui) {
 	// Global bindings
 	g.SetKeybinding("", gocui.KeyTab, gocui.ModNone, m.nextPage)
 	g.SetKeybinding("", '?', gocui.ModNone, m.ToggleHelp)
 	g.SetKeybinding("", gocui.KeyCtrlL, gocui.ModNone, m.clearLogs)
-	g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, m.toggleExitConfirm) // Only this one
+	g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, m.toggleExitConfirm)
 
 	// View-specific bindings
 	g.SetKeybinding("main", gocui.KeyArrowDown, gocui.ModNone, m.scrollDown)
