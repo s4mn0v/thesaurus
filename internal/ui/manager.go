@@ -58,7 +58,7 @@ func (m *ViewManager) Layout(g *gocui.Gui) error {
 		var sb strings.Builder
 		for i, name := range m.pageNames {
 			if i == m.currentPage {
-				sb.WriteString(fmt.Sprintf("\033[30;47m %s \033[0m  ", name))
+				sb.WriteString(fmt.Sprintf("\033[38;5;208m %s \033[0m  ", name))
 			} else {
 				sb.WriteString(fmt.Sprintf(" %s   ", name))
 			}
@@ -81,12 +81,12 @@ func (m *ViewManager) Layout(g *gocui.Gui) error {
 		if !errors.Is(err, gocui.ErrUnknownView) {
 			return err
 		}
-		v.Title, v.FrameColor, v.Wrap = " "+m.pageNames[m.currentPage]+" ", orange, true
+		v.Title, v.FrameColor, v.Wrap = " "+m.pageNames[m.currentPage]+" ", gocui.Get256Color(241), true
 	} else {
 		v.Clear()
 		m.drawPage(v)
 		v.SetOrigin(0, m.mainOY)
-		v.Title = " " + m.pageNames[m.currentPage] + " "
+		v.Title, v.TitleColor = " "+m.pageNames[m.currentPage]+" ", orange
 	}
 
 	rightX0 := mainX1 + 1

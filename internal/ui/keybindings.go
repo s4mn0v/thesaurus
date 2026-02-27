@@ -14,16 +14,16 @@ var GlobalBindings = []Binding{
 
 var PageBindings = map[string][]Binding{
 	"DASHBOARD": {
-		{"c-o", "Copy path", "Local"},
-		{"space", "Stage", "Local"},
+		{"c-o", "Copy path", "Page"},
+		{"space", "Stage", "Page"},
 	},
 	"ANALYTICS": {
-		{"c-b", "Filter status", "Local"},
-		{"r", "Refresh data", "Local"},
+		{"c-b", "Filter status", "Page"},
+		{"r", "Refresh data", "Page"},
 	},
 	"SETTINGS": {
-		{"s", "Save config", "Local"},
-		{"i", "Import keys", "Local"},
+		{"s", "Save config", "Page"},
+		{"i", "Import keys", "Page"},
 	},
 }
 
