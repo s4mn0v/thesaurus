@@ -17,6 +17,7 @@ type ViewManager struct {
 	mainOY          int
 	currentTicker   *trading.TickerData
 	showHelp        bool
+	showNav         bool
 	helpBinding     int
 	logger          *UILogger
 	showExitConfirm bool
@@ -25,6 +26,7 @@ type ViewManager struct {
 func NewViewManager() *ViewManager {
 	return &ViewManager{
 		pageNames: []string{"DASHBOARD", "ANALYTICS", "SETTINGS"},
+		showNav:   true,
 	}
 }
 
@@ -42,39 +44,39 @@ func (m *ViewManager) Layout(g *gocui.Gui) error {
 	maxX, maxY := g.Size()
 	orange := gocui.Get256Color(208)
 
-	// Layout Constants
-	navH := 2      // Navigation height
-	spacer := 0    // Space between nav and content
-	sideW := 45    // Right panel width
-	footerH := 2   // Footer height
-	overviewH := 6 // Overview panel height
-
-	// 1. TOP NAVIGATION (Horizontal)
-	// Y1 set to navH ensures it only takes the top rows
-	if v, err := g.SetView("navigation", 0, 0, maxX-1, navH, 0); err != nil {
-		if !errors.Is(err, gocui.ErrUnknownView) {
-			return err
+	navH := -1
+	if m.showNav {
+		navH = 2
+		v, err := g.SetView("navigation", 0, 0, maxX-1, navH, 0)
+		if err != nil {
+			if !errors.Is(err, gocui.ErrUnknownView) {
+				return err
+			}
+			v.Title, v.FrameColor = " Navigation ", orange
 		}
-		v.Title, v.FrameColor = " Navigation ", orange
-	} else {
 		v.Clear()
-		var navItems []string
+		var sb strings.Builder
 		for i, name := range m.pageNames {
 			if i == m.currentPage {
-				navItems = append(navItems, fmt.Sprintf("\033[30;47m %s \033[0m", name))
+				sb.WriteString(fmt.Sprintf("\033[30;47m %s \033[0m  ", name))
 			} else {
-				navItems = append(navItems, fmt.Sprintf(" %s ", name))
+				sb.WriteString(fmt.Sprintf(" %s   ", name))
 			}
 		}
-		fmt.Fprint(v, strings.Join(navItems, "  "))
+		v.Write([]byte(sb.String()))
+	} else {
+		g.DeleteView("navigation")
 	}
 
-	// Calculate vertical starting point for all content panels
+	spacer := 0
+	sideW := 45
+	footerH := 2
+	overviewH := 6
+
 	contentY0 := navH + spacer + 1
 	contentY1 := maxY - footerH
 	mainX1 := maxX - sideW - 1
 
-	// 2. MAIN CONTENT (Left Side)
 	if v, err := g.SetView("main", 0, contentY0, mainX1, contentY1, 0); err != nil {
 		if !errors.Is(err, gocui.ErrUnknownView) {
 			return err
@@ -90,7 +92,6 @@ func (m *ViewManager) Layout(g *gocui.Gui) error {
 	rightX0 := mainX1 + 1
 	overviewY1 := contentY0 + overviewH
 
-	// 3. OVERVIEW / DESCRIPTION (Right Top)
 	if v, err := g.SetView("description", rightX0, contentY0, maxX-1, overviewY1, 0); err != nil {
 		if !errors.Is(err, gocui.ErrUnknownView) {
 			return err
@@ -101,7 +102,6 @@ func (m *ViewManager) Layout(g *gocui.Gui) error {
 		m.renderDescription(v)
 	}
 
-	// 4. LOGS & ACTIVITY (Right Bottom)
 	if v, err := g.SetView("side_bottom", rightX0, overviewY1+1, maxX-1, contentY1, 0); err != nil {
 		if !errors.Is(err, gocui.ErrUnknownView) {
 			return err
@@ -109,7 +109,6 @@ func (m *ViewManager) Layout(g *gocui.Gui) error {
 		v.Title, v.FrameColor, v.Autoscroll, v.Wrap = " Logs & Activity ", orange, true, true
 	}
 
-	// 5. FOOTER
 	if v, err := g.SetView("footer", -1, maxY-footerH, maxX, maxY, 0); err != nil {
 		if !errors.Is(err, gocui.ErrUnknownView) {
 			return err
@@ -117,7 +116,7 @@ func (m *ViewManager) Layout(g *gocui.Gui) error {
 		v.Frame = false
 	} else {
 		v.Clear()
-		fmt.Fprintf(v, "\033[33mKeybindings:\033[0m \033[36m?\033[0m | \033[33mPage:\033[0m \033[36mTAB\033[0m")
+		fmt.Fprintf(v, "\033[33mKeybindings:\033[0m \033[36m?\033[0m | \033[33mNav:\033[0m \033[36mCtrl+N\033[0m")
 	}
 
 	if err := m.renderHelp(g, maxX, maxY); err != nil {
@@ -233,6 +232,7 @@ func (m *ViewManager) SetKeybindings(g *gocui.Gui) {
 	// Global bindings
 	g.SetKeybinding("", gocui.KeyTab, gocui.ModNone, m.nextPage)
 	g.SetKeybinding("", '?', gocui.ModNone, m.ToggleHelp)
+	g.SetKeybinding("", gocui.KeyCtrlN, gocui.ModNone, m.ToggleNav)
 	g.SetKeybinding("", gocui.KeyCtrlL, gocui.ModNone, m.clearLogs)
 	g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, m.toggleExitConfirm)
 
@@ -265,10 +265,17 @@ func (m *ViewManager) ToggleHelp(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
+func (m *ViewManager) ToggleNav(g *gocui.Gui, v *gocui.View) error {
+	m.showNav = !m.showNav
+	g.Update(func(g *gocui.Gui) error { return nil })
+	return nil
+}
+
 func (m *ViewManager) nextPage(g *gocui.Gui, v *gocui.View) error {
 	m.currentPage = (m.currentPage + 1) % len(m.pageNames)
 	m.mainOY = 0
-	m.helpBinding = 0 // Reset help cursor when switching pages
+	m.helpBinding = 0
+	g.Update(func(g *gocui.Gui) error { return nil })
 	return nil
 }
 

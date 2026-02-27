@@ -25,21 +25,28 @@ func main() {
 	g.SetManagerFunc(manager.Layout)
 	manager.SetKeybindings(g)
 
-	// Background fetching loop
 	go func() {
-		ticker := time.NewTicker(2 * time.Second)
-		defer ticker.Stop()
-		for range ticker.C {
-			data, err := engine.FetchTicker("BTCUSDT")
-			if err != nil {
-				logger.Log("\033[31mError:\033[0m %v", err)
-				continue
-			}
-			manager.UpdateTicker(data)
-			logger.Log("Market simulated: %s at %s", data.Symbol, data.Price)
+		// Faster ticker for UI responsiveness (50ms)
+		uiTicker := time.NewTicker(50 * time.Millisecond)
+		// Separate ticker for data simulation (1s)
+		dataTicker := time.NewTicker(1 * time.Second)
 
-			// Refresh UI
-			g.Update(func(g *gocui.Gui) error { return nil })
+		defer uiTicker.Stop()
+		defer dataTicker.Stop()
+
+		for {
+			select {
+			case <-dataTicker.C:
+				data, err := engine.FetchTicker("BTCUSDT")
+				if err != nil {
+					logger.Log("\033[31mError:\033[0m %v", err)
+					continue
+				}
+				manager.UpdateTicker(data)
+				logger.Log("Market updated: %s", data.Price)
+			case <-uiTicker.C:
+				g.Update(func(g *gocui.Gui) error { return nil })
+			}
 		}
 	}()
 
