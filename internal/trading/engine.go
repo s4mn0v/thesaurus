@@ -36,3 +36,17 @@ func (e *Engine) FetchTicker(symbol string) (*TickerData, error) {
 		Price:  fmt.Sprintf("%.2f", price),
 	}, nil
 }
+
+func (e *Engine) StreamTicker(symbol string, interval time.Duration) <-chan *TickerData {
+	out := make(chan *TickerData)
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for range ticker.C {
+			if data, err := e.FetchTicker(symbol); err == nil {
+				out <- data
+			}
+		}
+	}()
+	return out
+}

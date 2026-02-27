@@ -8,6 +8,7 @@ import (
 
 	"github.com/awesome-gocui/gocui"
 	"github.com/s4mn0v/thesaurus/internal/trading"
+	"github.com/s4mn0v/thesaurus/internal/ui/theme"
 )
 
 type ViewManager struct {
@@ -135,15 +136,14 @@ func (m *ViewManager) drawPage(v *gocui.View) {
 	}
 
 	if m.currentTicker == nil {
-		fmt.Fprintln(v, "\033[33mConnecting to simulated exchange...\033[0m")
+		fmt.Fprintf(v, "%sConnecting to simulated exchange...%s\n", theme.Yellow, theme.Reset)
 		return
 	}
 
-	// Active State (Dashboard)
-	fmt.Fprint(v, "\n \033[1mMARKET TICKER (SIMULATED)\033[0m\n")
+	fmt.Fprintf(v, "\n %sMARKET TICKER (SIMULATED)%s\n", theme.Bold, theme.Reset)
 	fmt.Fprint(v, " ─────────────\n")
 	fmt.Fprintf(v, " ASSET: %s\n", m.currentTicker.Symbol)
-	fmt.Fprintf(v, " PRICE: \033[32m$%s\033[0m\n", m.currentTicker.Price)
+	fmt.Fprintf(v, " PRICE: %s$%s%s\n", theme.Green, m.currentTicker.Price, theme.Reset)
 }
 
 func (m *ViewManager) getActiveBindings() []Binding {
@@ -271,6 +271,22 @@ func (m *ViewManager) ToggleNav(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
+func (m *ViewManager) Listen(g *gocui.Gui, dataStream <-chan *trading.TickerData) {
+	go func() {
+		for data := range dataStream {
+			m.mu.Lock()
+			m.currentTicker = data
+			m.mu.Unlock()
+
+			// Event-driven update: only refresh when new data arrives
+			g.Update(func(g *gocui.Gui) error { return nil })
+			if m.logger != nil {
+				m.logger.Log("Market updated: %s", data.Price)
+			}
+		}
+	}()
+}
+
 func (m *ViewManager) nextPage(g *gocui.Gui, v *gocui.View) error {
 	m.currentPage = (m.currentPage + 1) % len(m.pageNames)
 	m.mainOY = 0
@@ -311,7 +327,7 @@ func (m *ViewManager) helpUp(g *gocui.Gui, v *gocui.View) error {
 func (m *ViewManager) clearLogs(g *gocui.Gui, v *gocui.View) error {
 	vLogs, err := g.View("side_bottom")
 	if err != nil {
-		return nil
+		return fmt.Errorf("view side_bottom not found: %w", err)
 	}
 
 	vLogs.Clear()
@@ -324,7 +340,7 @@ func (m *ViewManager) renderExitConfirm(g *gocui.Gui, maxX, maxY int) error {
 		return nil
 	}
 
-	w, h := 30, 3
+	w, h := 30, 2
 	x0, y0 := (maxX-w)/2, (maxY-h)/2
 	x1, y1 := x0+w, y0+h
 
