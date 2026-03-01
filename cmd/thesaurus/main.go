@@ -8,6 +8,7 @@ import (
 	"github.com/awesome-gocui/gocui"
 	"github.com/s4mn0v/thesaurus/internal/trading"
 	"github.com/s4mn0v/thesaurus/internal/ui"
+	"github.com/s4mn0v/thesaurus/internal/ui/pages"
 )
 
 func main() {
@@ -18,13 +19,18 @@ func main() {
 	defer g.Close()
 
 	engine := trading.NewEngine()
-	manager := ui.NewViewManager()
+
+	appPages := []ui.Page{
+		&pages.Dashboard{},
+		&pages.Analytics{},
+	}
+
+	manager := ui.NewManager(appPages)
 	manager.SetLogger(ui.NewUILogger(g))
 
 	g.SetManagerFunc(manager.Layout)
 	manager.SetKeybindings(g)
 
-	// Points 2 & 6: Channel-based, event-driven flow
 	dataStream := engine.StreamTicker("BTCUSDT", 1*time.Second)
 	manager.Listen(g, dataStream)
 
